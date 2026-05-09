@@ -1,80 +1,42 @@
+// providers/paystackProvider.ts
 import type { BillingProvider, SubscriptionTier, SubscriptionStatus } from "@/types";
 
-/**
- * PAYSTACK PROVIDER (REAL PAYMENT READY STRUCTURE)
- * IMPORTANT:
- * - Paystack MUST be handled via backend initialization
- * - Frontend only redirects to authorization_url
- * - Supabase is the ONLY source of truth after webhook
- */
 export const paystackProvider: BillingProvider = {
   name: "paystack",
 
   async subscribe(tier: SubscriptionTier): Promise<SubscriptionStatus> {
-    try {
-      // REAL FLOW (DO NOT SKIP THIS IN BACKEND IMPLEMENTATION):
-      // const res = await fetch("/api/billing/paystack/initialize", {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ tier }),
-      // });
-      //
-      // const data = await res.json();
-      // if (!res.ok) throw new Error(data?.message || "Paystack init failed");
-      //
-      // window.location.href = data.authorization_url;
+    const res = await fetch("/api/payments/paystack/initialize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ tier }),
+    });
 
-      await new Promise((r) => setTimeout(r, 800));
+    if (!res.ok) throw new Error("Paystack init failed");
 
-      return {
-        tier,
-        isSubscribed: tier !== "free",
-        provider: "paystack",
-        status: "pending",
-        mockMode: true,
-      };
-    } catch {
-      throw new Error("Paystack subscription initialization failed");
-    }
+    return res.json();
   },
 
   async cancel(): Promise<SubscriptionStatus> {
-    try {
-      // REAL FLOW:
-      // await fetch("/api/billing/paystack/cancel", { method: "POST" });
+    const res = await fetch("/api/payments/paystack/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
 
-      await new Promise((r) => setTimeout(r, 500));
+    if (!res.ok) throw new Error("Paystack cancel failed");
 
-      return {
-        tier: "free",
-        isSubscribed: false,
-        provider: "paystack",
-        status: "canceled",
-        mockMode: true,
-      };
-    } catch {
-      throw new Error("Paystack cancellation failed");
-    }
+    return res.json();
   },
 
   async getSubscriptionStatus(): Promise<SubscriptionStatus> {
-    try {
-      // REAL SOURCE OF TRUTH = SUPABASE
-      // const { data } = await supabase
-      //   .from("profiles")
-      //   .select("subscription_tier, subscription_status")
-      //   .eq("id", userId)
-      //   .single();
+    const res = await fetch("/api/payments/paystack/status", {
+      method: "GET",
+      credentials: "include",
+    });
 
-      return {
-        tier: "free",
-        isSubscribed: false,
-        provider: "paystack",
-        status: "inactive",
-        mockMode: true,
-      };
-    } catch {
-      throw new Error("Failed to fetch Paystack subscription status");
-    }
+    if (!res.ok) throw new Error("Paystack status failed");
+
+    return res.json();
   },
 };
