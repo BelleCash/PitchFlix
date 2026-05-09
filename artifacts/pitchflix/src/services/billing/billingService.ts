@@ -1,89 +1,87 @@
-```ts
+// billingService.ts
 import type { BillingProvider, SubscriptionTier, SubscriptionStatus } from "@/types";
+
 import { stripeProvider } from "./providers/stripeProvider";
 import { paystackProvider } from "./providers/paystackProvider";
 import { lemonSqueezyProvider } from "./providers/lemonSqueezyProvider";
 import { paddleProvider } from "./providers/paddleProvider";
+import { moniepointProvider } from "./providers/moniepointProvider";
+import { opayProvider } from "./providers/opayProvider";
 
-/**
- * Centralized billing providers registry
- * NOTE: Supabase remains source of truth for subscription state
- * Providers ONLY handle payment + webhook initiation
- */
 const PROVIDERS: Record<string, BillingProvider> = {
   stripe: stripeProvider,
   paystack: paystackProvider,
   lemonsqueezy: lemonSqueezyProvider,
   paddle: paddleProvider,
+  moniepoint: moniepointProvider,
+  opay: opayProvider,
 };
 
-const DEFAULT_PROVIDER: keyof typeof PROVIDERS = "stripe";
+const DEFAULT_PROVIDER = "stripe";
 
-function resolveProvider(name?: string): BillingProvider {
-  if (!name) return PROVIDERS[DEFAULT_PROVIDER];
-  return PROVIDERS[name] ?? PROVIDERS[DEFAULT_PROVIDER];
+function getProvider(name?: string): BillingProvider {
+  return PROVIDERS[name ?? DEFAULT_PROVIDER] ?? stripeProvider;
+}
+
+// Supabase is source of truth (ALL status writes/reads go through backend)
+async function fetchSubscriptionStatusFromSupabase(): Promise<SubscriptionStatus> {
+  const res = await fetch("/api/billing/status", {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+
+  if (!res.ok) throw new Error("Failed to fetch subscription status");
+  return res.json();
 }
 
 export const billingService = {
-  /**
-   * Start subscription checkout flow (NOT direct activation)
-   * Activation must happen via webhook → Supabase update
-   */
-  async subscribe(opts: {
-    provider?: string;
-    tier: SubscriptionTier;
-    userId?: string;
-  }): Promise<SubscriptionStatus> {
-    const provider = resolveProvider(opts.provider);
+  async subscribe(opts: { provider?: string; tier: SubscriptionTier }): Promise<SubscriptionStatus> {
+    const provider = getProvider(opts.provider);
 
     const result = await provider.subscribe(opts.tier);
 
-    if (!result) {
-      throw new Error("Subscription failed to initialize");
-    }
+    // persist to Supabase (source of truth)
+    const res = await fetch("/api/billing/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        tier: opts.tier,
+        provider: provider.name,
+      }),
+    });
 
-    return result;
+    if (!res.ok) throw new Error("Failed to persist subscription");
+
+    return fetchSubscriptionStatusFromSupabase();
   },
 
-  /**
-   * Cancel subscription via provider
-   * Supabase sync handled via webhook
-   */
-  async cancel(opts?: {
-    provider?: string;
-    userId?: string;
-  }): Promise<SubscriptionStatus> {
-    const provider = resolveProvider(opts?.provider);
+  async cancel(opts?: { provider?: string }): Promise<SubscriptionStatus> {
+    const provider = getProvider(opts?.provider);
 
-    const result = await provider.cancel();
+    await provider.cancel();
 
-    if (!result) {
-      throw new Error("Cancellation failed");
-    }
+    const res = await fetch("/api/billing/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        provider: provider.name,
+      }),
+    });
 
-    return result;
+    if (!res.ok) throw new Error("Failed to cancel subscription");
+
+    return fetchSubscriptionStatusFromSupabase();
   },
 
-  /**
-   * Always considered read-only from provider layer
-   * Supabase remains authoritative, but fallback allowed
-   */
-  async getStatus(opts?: {
-    provider?: string;
-    userId?: string;
-  }): Promise<SubscriptionStatus> {
-    const provider = resolveProvider(opts?.provider);
-
-    const status = await provider.getSubscriptionStatus();
-
-    return status;
+  async getStatus(opts?: { provider?: string }): Promise<SubscriptionStatus> {
+    // ALWAYS Supabase-backed truth
+    return fetchSubscriptionStatusFromSupabase();
   },
 
-  /**
-   * Available payment integrations
-   */
   listProviders(): string[] {
     return Object.keys(PROVIDERS);
   },
 };
-```
