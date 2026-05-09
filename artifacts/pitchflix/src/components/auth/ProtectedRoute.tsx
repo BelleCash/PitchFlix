@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/context/AuthContext";
-import { canAccess, type AppFeature } from "@/lib/roleAccess";
+import { canAccess } from "@/lib/roleAccess";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  feature: AppFeature;
+  feature?: "browse" | "create_pitch" | "invest";
   fallback?: string;
 }
 
@@ -14,20 +14,25 @@ export default function ProtectedRoute({
   feature,
   fallback = "/",
 }: ProtectedRouteProps) {
-  const { userProfile, authLoading } = useAuth();
+  const { user, userProfile, authLoading } = useAuth();
   const [, navigate] = useLocation();
 
   useEffect(() => {
     if (authLoading) return;
 
-    if (!userProfile || !canAccess(userProfile, feature)) {
+    if (!user) {
+      navigate(fallback);
+      return;
+    }
+
+    if (feature && !canAccess(userProfile, feature)) {
       navigate(fallback);
     }
-  }, [userProfile, authLoading, feature, fallback, navigate]);
+  }, [user, userProfile, authLoading, feature, fallback, navigate]);
 
-  if (authLoading) return null;
-  if (!userProfile) return null;
-  if (!canAccess(userProfile, feature)) return null;
+  if (authLoading || !user) return null;
+
+  if (feature && !canAccess(userProfile, feature)) return null;
 
   return <>{children}</>;
 }
