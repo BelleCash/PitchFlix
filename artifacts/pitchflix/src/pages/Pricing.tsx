@@ -2,52 +2,145 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import PricingCard from "@/components/billing/PricingCard";
-import { useBilling } from "@/context/BillingContext";
 import { useAuth } from "@/context/AuthContext";
 import type { SubscriptionTier } from "@/types";
 
+type PaymentProvider =
+  | "stripe"
+  | "paystack"
+  | "lemonsqueezy"
+  | "opay"
+  | "moniepoint";
+
 const PLANS: {
-  tier: SubscriptionTier; name: string; price: number; description: string;
-  features: string[]; recommended?: boolean;
+  tier: SubscriptionTier;
+  name: string;
+  price: number;
+  description: string;
+  features: string[];
+  recommended?: boolean;
 }[] = [
   {
-    tier: "free", name: "Free", price: 0,
+    tier: "free",
+    name: "Free",
+    price: 0,
     description: "Start exploring the marketplace.",
     features: ["Browse all pitches", "Like pitches", "Public profiles", "Tag search"],
   },
   {
-    tier: "starter", name: "Starter", price: 9,
+    tier: "starter",
+    name: "Starter",
+    price: 9,
     description: "For creators ready to pitch.",
-    features: ["Creator profile", "Upload pitches", "AI pitch scoring", "Basic analytics", "Genre filtering", "Payout account setup"],
+    features: [
+      "Creator profile",
+      "Upload pitches",
+      "AI pitch scoring",
+      "Basic analytics",
+      "Genre filtering",
+      "Payout account setup",
+    ],
   },
   {
-    tier: "pro", name: "Pro Investor", price: 19,
+    tier: "pro",
+    name: "Pro Investor",
+    price: 19,
     description: "Find and fund the next big film.",
-    features: ["Investor dashboard", "Deal flow feed", "Watchlists", "Investor voting", "AI deal scoring", "Trending alerts", "Capital wallet", "Investor comments"],
     recommended: true,
+    features: [
+      "Investor dashboard",
+      "Deal flow feed",
+      "Watchlists",
+      "Investor voting",
+      "AI deal scoring",
+      "Trending alerts",
+      "Capital wallet",
+      "Investor comments",
+    ],
   },
   {
-    tier: "studio", name: "Studio", price: 49,
+    tier: "studio",
+    name: "Studio",
+    price: 49,
     description: "Full-platform power for studios and teams.",
-    features: ["Everything in Pro", "Unlimited pitch uploads", "Advanced analytics", "Featured placement", "Team access", "Priority support", "Early deal access"],
+    features: [
+      "Everything in Pro",
+      "Unlimited pitch uploads",
+      "Advanced analytics",
+      "Featured placement",
+      "Team access",
+      "Priority support",
+      "Early deal access",
+    ],
   },
 ];
 
+const PAYMENT_PROVIDERS: { id: PaymentProvider; label: string }[] = [
+  { id: "stripe", label: "Stripe (Test Mode)" },
+  { id: "paystack", label: "Paystack (NGN)" },
+  { id: "lemonsqueezy", label: "Lemon Squeezy" },
+  { id: "opay", label: "OPay (Mobile Money)" },
+  { id: "moniepoint", label: "Moniepoint" },
+];
+
 export default function Pricing() {
-  const { tier: currentTier, subscribe } = useBilling();
   const { user } = useAuth();
-  const [loading, setLoading] = useState<SubscriptionTier | null>(null);
   const [, navigate] = useLocation();
 
+  const [loading, setLoading] = useState<SubscriptionTier | null>(null);
+  const [provider, setProvider] = useState<PaymentProvider>("stripe");
+
+  /**
+   * REAL PAYMENT FLOW:
+   * - Calls backend API
+   * - Backend creates checkout session for provider
+   * - Redirect user
+   */
   const handleSelect = async (tier: SubscriptionTier) => {
-    if (!user) { navigate("/"); return; }
-    if (tier === currentTier) return;
+    if (!user) {
+      toast.error("Please sign in to continue");
+      navigate("/");
+      return;
+    }
+
+    if (tier === "free") {
+      toast.success("You are already on Free plan");
+      return;
+    }
+
     setLoading(tier);
+
     try {
-      await subscribe(tier);
-      toast.success(`Plan activated!`, { description: `You're now on the ${tier} plan 🚀` });
-    } catch {
-      toast.error("Something went wrong. Please try again.");
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tier,
+          provider,
+          userId: user.id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Payment initialization failed");
+      }
+
+      /**
+       * Expected backend response:
+       * {
+       *   url: "https://checkout.stripe.com/...",
+       * }
+       */
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+
+      throw new Error("No checkout URL returned");
+    } catch (err: any) {
+      toast.error(err.message || "Payment failed");
     } finally {
       setLoading(null);
     }
@@ -55,51 +148,75 @@ export default function Pricing() {
 
   return (
     <div style={{ background: "#0b0b0f", minHeight: "100vh", paddingBottom: 100 }}>
+      {/* NAV */}
       <nav className="glass-nav" style={{ position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 28px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 66 }}>
-          <a href="/" style={{ display: "flex", alignItems: "center", gap: 9, textDecoration: "none" }}>
-            <div style={{ width: 33, height: 33, background: "#7c3aed", borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17 }}>🎬</div>
-            <span style={{ fontSize: 21, fontWeight: 900, letterSpacing: "-0.04em", color: "#fff" }}>Pitch<span style={{ color: "#8b5cf6" }}>Flix</span></span>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 28px", display: "flex", justifyContent: "space-between", alignItems: "center", height: 66 }}>
+          <a href="/" style={{ display: "flex", gap: 10, textDecoration: "none", alignItems: "center" }}>
+            <div style={{ width: 33, height: 33, background: "#7c3aed", borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center" }}>🎬</div>
+            <span style={{ fontWeight: 900, color: "#fff" }}>
+              Pitch<span style={{ color: "#8b5cf6" }}>Flix</span>
+            </span>
           </a>
-          <a href="/" style={{ fontSize: 13, color: "#9ca3af", textDecoration: "none", fontWeight: 500 }}>← Back</a>
+
+          <a href="/" style={{ color: "#9ca3af", textDecoration: "none" }}>← Back</a>
         </div>
       </nav>
 
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "72px 28px 0" }}>
-        <div style={{ textAlign: "center", marginBottom: 64 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.25)", borderRadius: 50, padding: "6px 18px", fontSize: 12, fontWeight: 700, color: "#8b5cf6", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 20 }}>
-            💳 Pricing Plans
-          </div>
-          <h1 style={{ fontSize: "clamp(2rem,5vw,3.2rem)", fontWeight: 900, letterSpacing: "-0.04em", marginBottom: 16 }}>
-            Invest in your <span style={{ background: "linear-gradient(90deg,#7c3aed,#a78bfa)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>story</span>
-          </h1>
-          <p style={{ color: "#9ca3af", fontSize: 16, maxWidth: 480, margin: "0 auto" }}>
-            From first-time creators to studio-level investors — pick the plan that matches your ambition.
-          </p>
+      {/* HEADER */}
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "70px 28px 0" }}>
+        <h1 style={{ fontSize: 40, fontWeight: 900, textAlign: "center" }}>
+          Choose Your <span style={{ color: "#8b5cf6" }}>Plan</span>
+        </h1>
+
+        <p style={{ textAlign: "center", color: "#9ca3af", marginTop: 10 }}>
+          Payments powered by real providers — secured & webhook-based via Supabase
+        </p>
+
+        {/* PAYMENT PROVIDER SELECTOR */}
+        <div style={{ display: "flex", justifyContent: "center", marginTop: 25, flexWrap: "wrap", gap: 10 }}>
+          {PAYMENT_PROVIDERS.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setProvider(p.id)}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 20,
+                border: "1px solid rgba(255,255,255,0.1)",
+                background: provider === p.id ? "#7c3aed" : "rgba(255,255,255,0.05)",
+                color: "#fff",
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 20, alignItems: "start" }}>
+        {/* PLANS */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))",
+            gap: 20,
+            marginTop: 40,
+          }}
+        >
           {PLANS.map((plan) => (
             <PricingCard
               key={plan.tier}
               {...plan}
-              current={currentTier === plan.tier}
+              current={false}
               loading={loading === plan.tier}
               onSelect={handleSelect}
             />
           ))}
         </div>
 
-        <div style={{ marginTop: 60, textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 24, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#4b5563", fontSize: 13 }}>
-            <span>🔒</span> Secure checkout
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#4b5563", fontSize: 13 }}>
-            <span>↩️</span> Cancel anytime
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#4b5563", fontSize: 13 }}>
-            <span>⚡</span> Instant activation
-          </div>
+        {/* NOTE */}
+        <div style={{ marginTop: 60, textAlign: "center", color: "#6b7280", fontSize: 13 }}>
+          ⚡ All subscriptions are verified via Supabase webhooks (not frontend state)
         </div>
       </div>
     </div>
