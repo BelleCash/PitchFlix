@@ -1,67 +1,42 @@
+// providers/stripeProvider.ts
 import type { BillingProvider, SubscriptionTier, SubscriptionStatus } from "@/types";
 
-/**
- * STRIPE PROVIDER (TEST MODE → READY FOR REAL STRIPE API UPGRADE)
- * IMPORTANT:
- * - This is currently mock-safe
- * - Replace subscribe() with Stripe Checkout Session (backend call)
- * - Supabase MUST handle final subscription state via webhook
- */
 export const stripeProvider: BillingProvider = {
   name: "stripe",
 
   async subscribe(tier: SubscriptionTier): Promise<SubscriptionStatus> {
-    try {
-      // 👉 REAL IMPLEMENTATION SHOULD CALL YOUR BACKEND:
-      // const res = await fetch("/api/billing/stripe/checkout", { method: "POST", body: JSON.stringify({ tier }) });
-      // const data = await res.json();
-      // window.location.href = data.url;
+    const res = await fetch("/api/payments/stripe/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ tier }),
+    });
 
-      await new Promise((r) => setTimeout(r, 800));
+    if (!res.ok) throw new Error("Stripe checkout failed");
 
-      return {
-        tier,
-        isSubscribed: tier !== "free",
-        provider: "stripe",
-        status: "pending",
-        mockMode: true,
-      };
-    } catch (error) {
-      throw new Error("Stripe subscription failed to initialize");
-    }
+    return res.json();
   },
 
   async cancel(): Promise<SubscriptionStatus> {
-    try {
-      // 👉 REAL: call backend to cancel Stripe subscription
-      await new Promise((r) => setTimeout(r, 500));
+    const res = await fetch("/api/payments/stripe/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
 
-      return {
-        tier: "free",
-        isSubscribed: false,
-        provider: "stripe",
-        status: "canceled",
-        mockMode: true,
-      };
-    } catch {
-      throw new Error("Stripe cancellation failed");
-    }
+    if (!res.ok) throw new Error("Stripe cancel failed");
+
+    return res.json();
   },
 
   async getSubscriptionStatus(): Promise<SubscriptionStatus> {
-    try {
-      // 👉 REAL: should fetch from Supabase (NOT Stripe directly)
-      // const { data } = await supabase.from("profiles").select("subscription_tier, subscription_status").eq("id", userId)
+    const res = await fetch("/api/payments/stripe/status", {
+      method: "GET",
+      credentials: "include",
+    });
 
-      return {
-        tier: "free",
-        isSubscribed: false,
-        provider: "stripe",
-        status: "inactive",
-        mockMode: true,
-      };
-    } catch {
-      throw new Error("Failed to fetch Stripe subscription status");
-    }
+    if (!res.ok) throw new Error("Stripe status failed");
+
+    return res.json();
   },
 };
