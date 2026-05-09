@@ -8,10 +8,15 @@ interface PitchGridProps {
   onLike: (id: string, currentLikes: number) => void;
 }
 
-export default function PitchGrid({ pitches, loading, liked, onLike }: PitchGridProps) {
+export default function PitchGrid({
+  pitches,
+  loading,
+  liked,
+  onLike,
+}: PitchGridProps) {
   const gridStyle: React.CSSProperties = {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))",
+    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
     gap: 20,
   };
 
@@ -19,18 +24,43 @@ export default function PitchGrid({ pitches, loading, liked, onLike }: PitchGrid
     return (
       <div style={gridStyle}>
         {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="skeleton" style={{ aspectRatio: "2/3" }} />
+          <div
+            key={i}
+            className="skeleton"
+            style={{
+              aspectRatio: "2/3",
+              borderRadius: 12,
+              background: "rgba(255,255,255,0.06)",
+            }}
+          />
         ))}
       </div>
     );
   }
 
-  if (pitches.length === 0) {
+  if (!pitches || pitches.length === 0) {
     return (
-      <div style={{ textAlign: "center", padding: "80px 0", color: "#4b5563" }}>
+      <div
+        style={{
+          textAlign: "center",
+          padding: "80px 0",
+          color: "#4b5563",
+        }}
+      >
         <div style={{ fontSize: 48, marginBottom: 16 }}>🎬</div>
-        <h3 style={{ fontSize: 18, fontWeight: 700, color: "#6b7280", marginBottom: 8 }}>No pitches found</h3>
-        <p style={{ fontSize: 14 }}>Try adjusting your filters or search terms</p>
+        <h3
+          style={{
+            fontSize: 18,
+            fontWeight: 700,
+            color: "#6b7280",
+            marginBottom: 8,
+          }}
+        >
+          No pitches found
+        </h3>
+        <p style={{ fontSize: 14 }}>
+          Try adjusting your filters or search terms
+        </p>
       </div>
     );
   }
@@ -41,7 +71,7 @@ export default function PitchGrid({ pitches, loading, liked, onLike }: PitchGrid
         <PitchCard
           key={pitch.id}
           pitch={pitch}
-          isLiked={liked.has(pitch.id)}
+          isLiked={liked?.has(pitch.id) ?? false}
           onLike={onLike}
           index={i}
         />
