@@ -1,4 +1,10 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+} from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import type { UserProfile, UserRole, PayoutProvider } from "@/types";
@@ -37,20 +43,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authLoading, setAuthLoading] = useState(true);
 
   // -----------------------------
-  // PROFILE FETCH (SOURCE OF TRUTH = SUPABASE)
+  // PROFILE FETCH (SINGLE SOURCE OF TRUTH = SUPABASE)
   // -----------------------------
   const fetchProfile = useCallback(async (u: User): Promise<UserProfile | null> => {
     const meta = u.user_metadata ?? {};
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", u.id)
-      .single();
-
-    if (error) {
-      console.warn("Profile fetch warning:", error.message);
-    }
+      .maybeSingle();
 
     const username =
       data?.username ??
@@ -62,15 +64,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       id: u.id,
       email: u.email ?? "",
       role: (data?.role ?? meta.role ?? "viewer") as UserRole,
-      subscriptionTier: (data?.subscription_tier ?? meta.subscription_tier ?? "free") as UserProfile["subscriptionTier"],
+
+      subscriptionTier: (data?.subscription_tier ??
+        meta.subscription_tier ??
+        "free") as UserProfile["subscriptionTier"],
+
       isSubscribed: (data?.subscription_tier ?? "free") !== "free",
+
       username,
       bio: data?.bio ?? meta.bio ?? "",
       avatarUrl: data?.avatar_url ?? avatarUrl(username || u.id),
-      onboardingComplete: data?.onboarding_complete ?? meta.onboarding_complete ?? false,
+
+      onboardingComplete:
+        data?.onboarding_complete ?? meta.onboarding_complete ?? false,
+
       walletConnected: data?.wallet_connected ?? false,
+
       payoutProvider: (data?.payout_provider ?? null) as PayoutProvider | null,
       payoutAccount: data?.payout_account ?? "",
+
       investorWalletBalance: data?.investor_wallet_balance ?? 0,
       creatorEarnings: data?.creator_earnings ?? 0,
     };
@@ -92,18 +104,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, hydrateProfile]);
 
   // -----------------------------
-  // INIT AUTH (FIXED RACE CONDITIONS)
+  // FIXED AUTH INIT (NO RACE / NO DOUBLE LOAD)
   // -----------------------------
   useEffect(() => {
-    if (!supabase) {
-      setAuthLoading(false);
-      return;
-    }
-
     let mounted = true;
 
     const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
       if (!mounted) return;
 
@@ -119,19 +128,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     init();
 
-    const { data: { subscription } } =
-      supabase.auth.onAuthStateChange(async (_event, session) => {
-        if (!mounted) return;
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return;
 
-        setSession(session);
-        setUser(session?.user ?? null);
+      setSession(session);
+      setUser(session?.user ?? null);
 
-        if (session?.user) {
-          await hydrateProfile(session.user);
-        } else {
-          setUserProfile(null);
-        }
-      });
+      if (session?.user) {
+        await hydrateProfile(session.user);
+      } else {
+        setUserProfile(null);
+      }
+    });
 
     return () => {
       mounted = false;
@@ -151,7 +161,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error?.message ?? null };
   };
 
-  const signUp = async (email: string, password: string, role: UserRole = "viewer") => {
+  const signUp = async (
+    email: string,
+    password: string,
+    role: UserRole = "viewer"
+  ) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -188,6 +202,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUserProfile(null);
   };
 
+  // -----------------------------
+  // ROLE UPDATE (SAFE SYNC FIX)
+  // -----------------------------
   const updateRole = async (role: UserRole) => {
     if (!user) return;
 
@@ -205,10 +222,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  const completeOnboarding = async ({ username, bio, role }: OnboardingData) => {
+  // -----------------------------
+  // ONBOARDING (SAFE)
+  // -----------------------------
+  const completeOnboarding = async ({
+    username,
+    bio,
+    role,
+  }: OnboardingData) => {
     if (!user) return;
 
-    const avatar = avatarUrl(username || user.email?.split("@")[0] || user.id);
+    const avatar = avatarUrl(
+      username || user.email?.split("@")[0] || user.id
+    );
 
     await supabase.auth.updateUser({
       data: {
@@ -234,7 +260,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setUserProfile((prev) =>
       prev
-        ? { ...prev, username, bio, role, avatarUrl: avatar, onboardingComplete: true }
+        ? {
+            ...prev,
+            username,
+            bio,
+            role,
+            avatarUrl: avatar,
+            onboardingComplete: true,
+          }
         : prev
     );
   };
