@@ -1,80 +1,41 @@
+// providers/paddleProvider.ts
 import type { BillingProvider, SubscriptionTier, SubscriptionStatus } from "@/types";
 
-/**
- * PADDLE PROVIDER (REAL PAYMENT STRUCTURE READY)
- * NOTE:
- * - Paddle uses checkout overlay or hosted checkout URL
- * - Frontend MUST NOT finalize subscription state
- * - Supabase webhook is source of truth
- */
 export const paddleProvider: BillingProvider = {
   name: "paddle",
 
   async subscribe(tier: SubscriptionTier): Promise<SubscriptionStatus> {
-    try {
-      // REAL IMPLEMENTATION FLOW:
-      // const res = await fetch("/api/billing/paddle/checkout", {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({ tier }),
-      // });
-      //
-      // const data = await res.json();
-      // if (!res.ok) throw new Error(data?.message || "Paddle init failed");
-      //
-      // window.location.href = data.checkout_url;
+    const res = await fetch("/api/payments/paddle/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ tier }),
+    });
 
-      await new Promise((r) => setTimeout(r, 800));
+    if (!res.ok) throw new Error("Paddle checkout failed");
 
-      return {
-        tier,
-        isSubscribed: tier !== "free",
-        provider: "paddle",
-        status: "pending",
-        mockMode: true,
-      };
-    } catch {
-      throw new Error("Paddle subscription initialization failed");
-    }
+    return res.json();
   },
 
   async cancel(): Promise<SubscriptionStatus> {
-    try {
-      // REAL FLOW:
-      // await fetch("/api/billing/paddle/cancel", { method: "POST" });
+    const res = await fetch("/api/payments/paddle/cancel", {
+      method: "POST",
+      credentials: "include",
+    });
 
-      await new Promise((r) => setTimeout(r, 500));
+    if (!res.ok) throw new Error("Paddle cancel failed");
 
-      return {
-        tier: "free",
-        isSubscribed: false,
-        provider: "paddle",
-        status: "canceled",
-        mockMode: true,
-      };
-    } catch {
-      throw new Error("Paddle cancellation failed");
-    }
+    return res.json();
   },
 
   async getSubscriptionStatus(): Promise<SubscriptionStatus> {
-    try {
-      // REAL SOURCE OF TRUTH: SUPABASE
-      // const { data } = await supabase
-      //   .from("profiles")
-      //   .select("subscription_tier, subscription_status")
-      //   .eq("id", userId)
-      //   .single();
+    const res = await fetch("/api/payments/paddle/status", {
+      method: "GET",
+      credentials: "include",
+    });
 
-      return {
-        tier: "free",
-        isSubscribed: false,
-        provider: "paddle",
-        status: "inactive",
-        mockMode: true,
-      };
-    } catch {
-      throw new Error("Failed to fetch Paddle subscription status");
-    }
+    if (!res.ok) throw new Error("Paddle status failed");
+
+    return res.json();
   },
 };
