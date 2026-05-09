@@ -5,28 +5,17 @@ import path from "path";
 
 export default defineConfig({
   base: "/",
-
-  plugins: [
-    react(),
-    tailwindcss(),
-  ],
-
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
-      "@assets": path.resolve(__dirname, "..", "..", "attached_assets"),
+      "@assets": path.resolve(__dirname, "../attached_assets"),
     },
     dedupe: ["react", "react-dom"],
   },
-
   root: path.resolve(__dirname),
-
- build: {
-  outDir: "dist",
-  emptyOutDir: true,
-}
-  server: {
-    host: true,
-    strictPort: false,
+  build: {
+    outDir: path.resolve(__dirname, "dist"),
+    emptyOutDir: true,
   },
 });
