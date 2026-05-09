@@ -1,9 +1,15 @@
+```ts
 import type { BillingProvider, SubscriptionTier, SubscriptionStatus } from "@/types";
 import { stripeProvider } from "./providers/stripeProvider";
 import { paystackProvider } from "./providers/paystackProvider";
 import { lemonSqueezyProvider } from "./providers/lemonSqueezyProvider";
 import { paddleProvider } from "./providers/paddleProvider";
 
+/**
+ * Centralized billing providers registry
+ * NOTE: Supabase remains source of truth for subscription state
+ * Providers ONLY handle payment + webhook initiation
+ */
 const PROVIDERS: Record<string, BillingProvider> = {
   stripe: stripeProvider,
   paystack: paystackProvider,
@@ -11,26 +17,73 @@ const PROVIDERS: Record<string, BillingProvider> = {
   paddle: paddleProvider,
 };
 
-const DEFAULT_PROVIDER = "stripe";
+const DEFAULT_PROVIDER: keyof typeof PROVIDERS = "stripe";
 
-function getProvider(name?: string): BillingProvider {
-  return PROVIDERS[name ?? DEFAULT_PROVIDER] ?? stripeProvider;
+function resolveProvider(name?: string): BillingProvider {
+  if (!name) return PROVIDERS[DEFAULT_PROVIDER];
+  return PROVIDERS[name] ?? PROVIDERS[DEFAULT_PROVIDER];
 }
 
 export const billingService = {
-  subscribe(opts: { provider?: string; tier: SubscriptionTier }): Promise<SubscriptionStatus> {
-    return getProvider(opts.provider).subscribe(opts.tier);
+  /**
+   * Start subscription checkout flow (NOT direct activation)
+   * Activation must happen via webhook → Supabase update
+   */
+  async subscribe(opts: {
+    provider?: string;
+    tier: SubscriptionTier;
+    userId?: string;
+  }): Promise<SubscriptionStatus> {
+    const provider = resolveProvider(opts.provider);
+
+    const result = await provider.subscribe(opts.tier);
+
+    if (!result) {
+      throw new Error("Subscription failed to initialize");
+    }
+
+    return result;
   },
 
-  cancel(opts?: { provider?: string }): Promise<SubscriptionStatus> {
-    return getProvider(opts?.provider).cancel();
+  /**
+   * Cancel subscription via provider
+   * Supabase sync handled via webhook
+   */
+  async cancel(opts?: {
+    provider?: string;
+    userId?: string;
+  }): Promise<SubscriptionStatus> {
+    const provider = resolveProvider(opts?.provider);
+
+    const result = await provider.cancel();
+
+    if (!result) {
+      throw new Error("Cancellation failed");
+    }
+
+    return result;
   },
 
-  getStatus(opts?: { provider?: string }): Promise<SubscriptionStatus> {
-    return getProvider(opts?.provider).getSubscriptionStatus();
+  /**
+   * Always considered read-only from provider layer
+   * Supabase remains authoritative, but fallback allowed
+   */
+  async getStatus(opts?: {
+    provider?: string;
+    userId?: string;
+  }): Promise<SubscriptionStatus> {
+    const provider = resolveProvider(opts?.provider);
+
+    const status = await provider.getSubscriptionStatus();
+
+    return status;
   },
 
+  /**
+   * Available payment integrations
+   */
   listProviders(): string[] {
     return Object.keys(PROVIDERS);
   },
 };
+```
