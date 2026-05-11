@@ -1,3 +1,4 @@
+```json
 {
   "name": "@workspace/pitchflix",
   "version": "0.0.0",
@@ -75,6 +76,9 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.105.3"
+    "@supabase/supabase-js": "^2.105.3",
+    "axios": "^1.9.0",
+    "stripe": "^18.1.1"
   }
 }
+```
