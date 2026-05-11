@@ -1,10 +1,18 @@
-// providers/stripeProvider.ts
-import type { BillingProvider, SubscriptionTier, SubscriptionStatus } from "@/types";
+import type {
+  BillingProvider,
+  SubscriptionTier,
+  SubscriptionStatus,
+} from "@/types";
 
 export const stripeProvider: BillingProvider = {
   name: "stripe",
 
-  async subscribe(tier: SubscriptionTier): Promise<SubscriptionStatus> {
+  /**
+   * ✅ ONLY creates checkout session
+   */
+  async subscribe(
+    tier: SubscriptionTier
+  ): Promise<{ checkoutUrl: string }> {
     const res = await fetch("/api/payments/stripe/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -12,11 +20,24 @@ export const stripeProvider: BillingProvider = {
       body: JSON.stringify({ tier }),
     });
 
-    if (!res.ok) throw new Error("Stripe checkout failed");
+    if (!res.ok) {
+      throw new Error("Stripe checkout failed");
+    }
 
-    return res.json();
+    const data = await res.json();
+
+    if (!data?.checkoutUrl) {
+      throw new Error("Invalid Stripe checkout response");
+    }
+
+    return {
+      checkoutUrl: data.checkoutUrl,
+    };
   },
 
+  /**
+   * ✅ cancel subscription (delegates to backend)
+   */
   async cancel(): Promise<SubscriptionStatus> {
     const res = await fetch("/api/payments/stripe/cancel", {
       method: "POST",
@@ -24,18 +45,25 @@ export const stripeProvider: BillingProvider = {
       credentials: "include",
     });
 
-    if (!res.ok) throw new Error("Stripe cancel failed");
+    if (!res.ok) {
+      throw new Error("Stripe cancel failed");
+    }
 
     return res.json();
   },
 
+  /**
+   * ⚠️ Status MUST come from backend (source of truth)
+   */
   async getSubscriptionStatus(): Promise<SubscriptionStatus> {
-    const res = await fetch("/api/payments/stripe/status", {
+    const res = await fetch("/api/billing/status", {
       method: "GET",
       credentials: "include",
     });
 
-    if (!res.ok) throw new Error("Stripe status failed");
+    if (!res.ok) {
+      throw new Error("Stripe status failed");
+    }
 
     return res.json();
   },
