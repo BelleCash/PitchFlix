@@ -1,5 +1,8 @@
-// billingService.ts
-import type { BillingProvider, SubscriptionTier, SubscriptionStatus } from "@/types";
+import type {
+  BillingProvider,
+  SubscriptionTier,
+  SubscriptionStatus,
+} from "@/types";
 
 import { stripeProvider } from "./providers/stripeProvider";
 import { paystackProvider } from "./providers/paystackProvider";
@@ -23,29 +26,9 @@ function getProvider(name?: string): BillingProvider {
   return PROVIDERS[name ?? DEFAULT_PROVIDER] ?? stripeProvider;
 }
 
-/**
- * ✅ SUPABASE IS THE ONLY SOURCE OF TRUTH
- * No provider is allowed to return final subscription state.
- */
-async function fetchSubscriptionStatusFromSupabase(): Promise<SubscriptionStatus> {
-  const res = await fetch("/api/billing/status", {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-  });
-
-  if (!res.ok) {
-    throw new Error("Failed to fetch subscription status from server");
-  }
-
-  return res.json();
-}
-
 export const billingService = {
   /**
-   * 🚨 IMPORTANT FIX:
-   * Providers ONLY create checkout sessions.
-   * They DO NOT determine subscription state.
+   * ✅ CREATE CHECKOUT ONLY (NO STATE CHANGES HERE)
    */
   async subscribe(opts: {
     provider?: string;
@@ -53,30 +36,31 @@ export const billingService = {
   }): Promise<{ checkoutUrl: string }> {
     const provider = getProvider(opts.provider);
 
-    // STEP 1: Create checkout session ONLY
     const checkout = await provider.subscribe(opts.tier);
 
-    // Expect provider to return URL or session
-    if (!checkout?.checkoutUrl && !checkout?.url) {
-      throw new Error("Invalid checkout response from provider");
+    if (!checkout) {
+      throw new Error("Provider did not return checkout session");
     }
 
-    const url = checkout.checkoutUrl ?? checkout.url;
+    const url = checkout.checkoutUrl || checkout.url;
 
-    // STEP 2: DO NOT update Supabase here
-    // Payment confirmation happens via webhook ONLY
+    if (!url) {
+      throw new Error("Invalid checkout URL from provider");
+    }
 
     return { checkoutUrl: url };
   },
 
   /**
-   * Cancel subscription (real backend is source of truth)
+   * ✅ CANCEL SUBSCRIPTION (SERVER IS SOURCE OF TRUTH)
    */
   async cancel(opts?: { provider?: string }): Promise<SubscriptionStatus> {
     const provider = getProvider(opts?.provider);
 
+    // 1. cancel at provider level
     await provider.cancel();
 
+    // 2. notify backend ONLY (no duplication of logic)
     const res = await fetch("/api/billing/cancel", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -90,14 +74,25 @@ export const billingService = {
       throw new Error("Failed to cancel subscription on server");
     }
 
-    return fetchSubscriptionStatusFromSupabase();
+    // 3. always fetch fresh truth from backend
+    return this.getStatus();
   },
 
   /**
-   * ALWAYS SERVER-SIDE TRUTH
+   * ✅ SINGLE SOURCE OF TRUTH = BACKEND ONLY
+   * (no frontend assumptions)
    */
   async getStatus(): Promise<SubscriptionStatus> {
-    return fetchSubscriptionStatusFromSupabase();
+    const res = await fetch("/api/billing/status", {
+      method: "GET",
+      credentials: "include",
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch subscription status");
+    }
+
+    return res.json();
   },
 
   listProviders(): string[] {
